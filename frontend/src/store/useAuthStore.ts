@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { User } from '../types';
-import { authAPI } from '../lib/api';
+import { authAPI, setUnauthorizedCallback } from '../lib/api';
+import { tokenStorage } from '../lib/tokenStorage';
 
 interface AuthState {
   user: User | null;
@@ -13,75 +13,93 @@ interface AuthState {
   register: (username: string, password: string, nickname?: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  initializeFromStorage: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  isLoading: false,
+
+  initializeFromStorage: () => {
+    const storedToken = tokenStorage.get();
+    if (storedToken) {
+      set({
+        token: storedToken,
+        isAuthenticated: true
+      });
+    }
+  },
+
+  login: async (username: string, password: string) => {
+    set({ isLoading: true });
+    try {
+      const result = await authAPI.login(username, password) as any;
+      
+      tokenStorage.set(result.token);
+      
+      set({
+        user: result.user,
+        token: result.token,
+        isAuthenticated: true,
+        isLoading: false
+      });
+    } catch (error: any) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  register: async (username: string, password: string, nickname?: string) => {
+    set({ isLoading: true });
+    try {
+      await authAPI.register(username, password, nickname);
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  logout: () => {
+    tokenStorage.remove();
+    set({
       user: null,
       token: null,
-      isAuthenticated: false,
-      isLoading: false,
+      isAuthenticated: false
+    });
+  },
 
-      login: async (username: string, password: string) => {
-        set({ isLoading: true });
-        try {
-          const result = await authAPI.login(username, password) as any;
-          localStorage.setItem('chat_token', result.token);
-          set({
-            user: result.user,
-            token: result.token,
-            isAuthenticated: true,
-            isLoading: false
-          });
-        } catch (error: any) {
-          set({ isLoading: false });
-          throw error;
-        }
-      },
-
-      register: async (username: string, password: string, nickname?: string) => {
-        set({ isLoading: true });
-        try {
-          await authAPI.register(username, password, nickname);
-          set({ isLoading: false });
-        } catch (error: any) {
-          set({ isLoading: false });
-          throw error;
-        }
-      },
-
-      logout: () => {
-        localStorage.removeItem('chat_token');
-        set({
-          user: null,
-          token: null,
-          isAuthenticated: false
-        });
-      },
-
-      checkAuth: async () => {
-        const token = get().token;
-        if (!token) {
-          return;
-        }
-        
-        try {
-          const result = await authAPI.getMe() as any;
-          set({ user: result.user, isAuthenticated: true });
-        } catch {
-          localStorage.removeItem('chat_token');
-          set({
-            user: null,
-            token: null,
-            isAuthenticated: false
-          });
-        }
-      }
-    }),
-    {
-      name: 'chat-auth-storage',
-      partialize: (state) => ({ token: state.token })
+  checkAuth: async () => {
+    const token = get().token || tokenStorage.get();
+    if (!token) {
+      set({
+        token: null,
+        isAuthenticated: false
+      });
+      return;
     }
-  )
-);
+    
+    try {
+      const result = await authAPI.getMe() as any;
+      set({ 
+        user: result.user, 
+        isAuthenticated: true,
+        token: token
+      });
+    } catch {
+      tokenStorage.remove();
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false
+      });
+    }
+  }
+}));
+
+setUnauthorizedCallback(() => {
+  const state = useAuthStore.getState();
+  state.logout();
+});

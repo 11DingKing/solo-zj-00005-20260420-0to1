@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { AuthService } from '../services/auth.service';
+import { authMiddleware } from '../middleware/auth';
 
 const authService = new AuthService();
 
@@ -52,7 +53,7 @@ authRouter.post('/login', async (c) => {
   }
 });
 
-authRouter.get('/me', async (c) => {
+authRouter.get('/me', authMiddleware, async (c) => {
   const user = c.get('user');
   return c.json({ user });
 });

@@ -1,11 +1,21 @@
+import { tokenStorage } from './tokenStorage';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
 }
 
+export type UnauthorizedCallback = () => void;
+
+let onUnauthorized: UnauthorizedCallback | null = null;
+
+export function setUnauthorizedCallback(callback: UnauthorizedCallback): void {
+  onUnauthorized = callback;
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const token = localStorage.getItem('chat_token');
+  const token = tokenStorage.get();
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -24,6 +34,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const data = await response.json();
   
   if (!response.ok) {
+    if (response.status === 401 && onUnauthorized) {
+      onUnauthorized();
+    }
     throw new Error(data.error || '请求失败');
   }
   
