@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { verify } from 'hono/jwt';
+import * as jwt from 'jsonwebtoken';
 import type { JWTPayload } from '../types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -18,7 +18,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
   const token = authHeader.substring(7);
   try {
-    const payload = await verify(token, JWT_SECRET) as JWTPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
     c.set('user', payload);
     await next();
   } catch (error) {
@@ -28,7 +28,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
 export const extractUserFromToken = async (token: string): Promise<JWTPayload | null> => {
   try {
-    const payload = await verify(token, JWT_SECRET) as JWTPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
     return payload;
   } catch {
     return null;

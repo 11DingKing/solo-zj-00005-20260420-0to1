@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcryptjs';
-import { sign } from 'hono/jwt';
+import * as jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { getMongoDB } from '../db/mongodb';
 import type { User, JWTPayload } from '../types';
@@ -50,7 +50,7 @@ export class AuthService {
       nickname: user.nickname
     };
 
-    const token = await sign(payload, JWT_SECRET);
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
     return { user, token };
   }
 
