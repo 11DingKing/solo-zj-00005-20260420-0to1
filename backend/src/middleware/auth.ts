@@ -26,11 +26,14 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   }
 });
 
-export const extractUserFromToken = async (token: string): Promise<JWTPayload | null> => {
+export const extractUserFromToken = (token: string): JWTPayload | null => {
   try {
+    console.log('Verifying token:', token.substring(0, 30) + '...');
     const payload = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    console.log('Token verified successfully, userId:', payload.userId);
     return payload;
-  } catch {
+  } catch (error) {
+    console.error('Token verification failed:', error);
     return null;
   }
 };

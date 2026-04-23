@@ -12,6 +12,8 @@ export class MessageService {
     nickname: string,
     content: string
   ): Promise<Message> {
+    console.log(`[MessageService] Saving message from ${nickname} to room ${roomId}: ${content.substring(0, 50)}...`);
+    
     const db = getMongoDB();
     const redis = getRedis();
     const messagesCollection = db.collection<Message>('messages');
@@ -25,12 +27,16 @@ export class MessageService {
       timestamp: new Date()
     };
 
-    await messagesCollection.insertOne(message);
+    console.log(`[MessageService] Inserting message into MongoDB: ${message.id}`);
+    const insertResult = await messagesCollection.insertOne(message);
+    console.log(`[MessageService] MongoDB insert result: acknowledged=${insertResult.acknowledged}`);
 
     const cacheKey = REDIS_KEYS.recentMessages(roomId);
+    console.log(`[MessageService] Caching message to Redis key: ${cacheKey}`);
     await redis.lPush(cacheKey, JSON.stringify(message));
     await redis.lTrim(cacheKey, 0, CACHED_MESSAGE_COUNT - 1);
 
+    console.log(`[MessageService] Message saved successfully: ${message.id}`);
     return message;
   }
 

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serve } from '@hono/node-server';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { Server as WebSocketServer, WebSocket } from 'ws';
 import { connectMongoDB } from './db/mongodb';
 import { connectRedis } from './db/redis';
@@ -37,15 +37,31 @@ async function main() {
   await connectMongoDB();
   await connectRedis();
   
-  const server = serve({
-    fetch: app.fetch,
-    port: PORT
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    console.log('HTTP request:', req.method, req.url);
+    try {
+      const response = await app.fetch(req);
+      
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
+      
+      const body = await response.text();
+      console.log('HTTP response:', response.status);
+      res.end(body);
+    } catch (error) {
+      console.error('Error handling HTTP request:', error);
+      res.statusCode = 500;
+      res.end('Internal Server Error');
+    }
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
   const webSocketService = new WebSocketService();
 
-  wss.on('connection', (ws: WebSocket, req) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    console.log('WebSocket connection event received');
     webSocketService.handleConnection(ws, req.url || '');
   });
 
@@ -53,8 +69,40 @@ async function main() {
     console.error('WebSocket server error:', error);
   });
 
-  console.log(`HTTP server running on http://localhost:${PORT}`);
-  console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
+  server.on('upgrade', (request, socket, head) => {
+    console.log('Upgrade request received for:', request.url);
+    
+    if (request.url?.startsWith('/ws')) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      console.log('Rejecting upgrade request for non-WS path');
+      socket.destroy();
+    }
+  });
+
+  server.listen(PORT, () => {
+    console.log(`HTTP server running on http://localhost:${PORT}`);
+    console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
+  });
+
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.syscall !== 'listen') {
+      throw error;
+    }
+
+    switch (error.code) {
+      case 'EACCES':
+        console.error(`Port ${PORT} requires elevated privileges`);
+        process.exit(1);
+      case 'EADDRINUSE':
+        console.error(`Port ${PORT} is already in use`);
+        process.exit(1);
+      default:
+        throw error;
+    }
+  });
 
   process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully');

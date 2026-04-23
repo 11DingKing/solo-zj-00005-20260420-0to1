@@ -31,11 +31,14 @@ export class WebSocketService {
       return;
     }
 
-    const user = await extractUserFromToken(token);
+    console.log('WebSocket connection attempt with token:', token?.substring(0, 30) + '...');
+    const user = extractUserFromToken(token);
     if (!user) {
+      console.log('WebSocket connection rejected: invalid token');
       ws.close(4001, 'Invalid token');
       return;
     }
+    console.log('WebSocket connection accepted for user:', user.username);
 
     const socketId = uuidv4();
     const client: ConnectedClient = {

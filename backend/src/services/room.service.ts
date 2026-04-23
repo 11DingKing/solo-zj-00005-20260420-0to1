@@ -64,15 +64,28 @@ export class RoomService {
     const redis = getRedis();
     const usersKey = REDIS_KEYS.onlineUsers(roomId);
     
+    console.log(`[RoomService] Adding user ${user.nickname} to room ${roomId}`);
+    console.log(`[RoomService] Redis key: ${usersKey}`);
+    
     const currentUsers = await this.getOnlineUsers(roomId);
+    console.log(`[RoomService] Current online users in room ${roomId}: ${currentUsers.length}`);
+    
     const existingUser = currentUsers.find(u => u.userId === user.userId);
     
     if (existingUser) {
+      console.log(`[RoomService] Removing existing user entry for ${user.nickname}`);
       await redis.sRem(usersKey, JSON.stringify(existingUser));
     }
     
-    await redis.sAdd(usersKey, JSON.stringify(user));
-    return this.getOnlineUsers(roomId);
+    const userJson = JSON.stringify(user);
+    console.log(`[RoomService] Adding user to Redis: ${userJson}`);
+    const addResult = await redis.sAdd(usersKey, userJson);
+    console.log(`[RoomService] Redis sAdd result: ${addResult}`);
+    
+    const updatedUsers = await this.getOnlineUsers(roomId);
+    console.log(`[RoomService] Updated online users: ${updatedUsers.length}`);
+    
+    return updatedUsers;
   }
 
   async removeUserFromRoom(roomId: string, socketId: string): Promise<OnlineUser[]> {
